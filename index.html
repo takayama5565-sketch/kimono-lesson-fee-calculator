@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>授業料計算アプリ</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+    :root { --bg: #F2F2F7; --card: #FFFFFF; --primary: #007AFF; --success: #34C759; --danger: #FF3B30; --text: #1C1C1E; --sub: #8E8E93; --border: #C6C6C8; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background-color: var(--bg); color: var(--text); font-size: 16px; scroll-behavior: smooth; }
+    
+    #overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: #fff; z-index: 99999; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; }
+    #loadingOverlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.98); z-index: 99998; display: none; flex-direction: column; justify-content: center; align-items: center; }
+    .spinner { border: 3px solid #E5E5EA; border-top: 3px solid var(--primary); border-radius: 50%; width: 36px; height: 36px; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    
+    .view { display: none; height: 100%; width: 100%; overflow-y: auto; padding-bottom: 120px; -webkit-overflow-scrolling: touch; }
+    .view.active { display: block; animation: fadeIn 0.2s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    
+    .header { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); padding: 16px 16px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 0.5px solid var(--border); position: sticky; top: 0; z-index: 100; }
+    .header-title { font-size: 17px; font-weight: 600; text-align: center; flex: 1; }
+    
+    .tab-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(255, 255, 255, 0.95); border-top: 0.5px solid var(--border); display: flex; justify-content: space-around; padding-bottom: env(safe-area-inset-bottom, 20px); z-index: 900; }
+    .tab-item { flex: 1; text-align: center; padding: 10px 0; color: var(--sub); font-size: 11px; font-weight: 500; cursor: pointer; }
+    .tab-item.active { color: var(--primary); }
+    .tab-icon { font-size: 24px; display: block; margin-bottom: 4px; }
+    
+    .main-content { padding-top: 16px; }
+    .section-title { font-size: 13px; color: #6D6D72; text-transform: uppercase; margin: 0 0 6px 16px; font-weight: 500; }
+    .card { background: var(--card); margin-bottom: 22px; border-top: 0.5px solid var(--border); border-bottom: 0.5px solid var(--border); }
+    .row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; min-height: 48px; background: #fff; border-bottom: 0.5px solid var(--border); }
+    .row:last-child { border-bottom: none; }
+    
+    .input-wrapper { flex: 1; display: flex; flex-direction: column; width: 100%; }
+    .input-label { font-size: 12px; color: var(--sub); margin-bottom: 5px; font-weight: 600; }
+    .select-full, .input-box { width: 100%; background: #F2F2F7; padding: 12px 14px; border-radius: 8px; color: var(--text); font-weight: 500; border: none; font-size: 16px; outline:none; }
+    .btn-main { width: calc(100% - 32px); padding: 16px; border-radius: 12px; font-size: 17px; font-weight: 600; border: none; background: var(--primary); color: #fff; margin: 16px; text-align: center; cursor: pointer; }
+    .btn-text { background: none; color: var(--primary); border: none; font-size: 16px; font-weight: 600; padding: 6px; cursor: pointer; }
+    .btn-add { color: var(--primary); background: none; border: none; font-size: 16px; font-weight: 600; width: 100%; text-align: left; cursor: pointer; }
+    .btn-outline { color: var(--primary); background: transparent; border: 1.5px solid var(--primary); padding: 12px; border-radius: 10px; font-size: 15px; font-weight: 600; width: calc(100% - 32px); margin: 0 16px 24px; text-align: center; cursor: pointer; }
+    
+    .manage-grid { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 16px 16px; }
+    .m-tab { flex: 1 1 calc(50% - 5px); text-align: center; padding: 14px 8px; font-size: 14px; font-weight: 600; border-radius: 12px; background: #E3E3E8; color: #555; cursor: pointer; border: 1px solid transparent; }
+    .m-tab.active { background: #E5F1FF; color: var(--primary); border-color: var(--primary); }
+    
+    .switch-container { width: 51px; height: 31px; position: relative; }
+    .switch { position: relative; display: inline-block; width: 51px; height: 31px; }
+    .switch input { display: none; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #E9E9EA; transition: .3s; border-radius: 31px; }
+    .slider:before { position: absolute; content: ""; height: 27px; width: 27px; left: 2px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; }
+    input:checked + .slider { background-color: var(--success); }
+    input:checked + .slider:before { transform: translateX(20px); }
+
+    .receipt { background: #fff; padding: 24px 20px; margin: 30px 16px; border-radius: 16px; border: 1px solid rgba(0,0,0,0.04); }
+    .r-item-main { display: flex; justify-content: space-between; font-weight: 600; margin-top: 12px; font-size: 15px; }
+    .r-item-sub, .r-item-disc { display: flex; justify-content: space-between; font-size: 13px; color: #666; margin-top: 4px; padding-left: 12px; }
+    .r-item-disc { color: var(--danger); font-weight: 500; }
+    .r-item-final { display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; border-bottom: 1px solid #eee; padding-bottom: 12px; margin-top: 8px; padding-top: 8px; }
+    .r-total { font-size: 25px; font-weight: 800; text-align: right; margin-top: 20px; padding-top: 15px; border-top: 2px solid #000; }
+    
+    .manage-area { display: none; } .manage-area.active { display: block; animation: fadeIn 0.2s; }
+    .list-item { padding: 14px 16px; border-bottom: 0.5px solid var(--border); display: flex; justify-content: space-between; background: #fff; align-items:center; cursor: pointer; }
+    
+    .modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--bg); z-index: 1000; transform: translateY(100%); transition: transform 0.3s; display: flex; flex-direction: column; }
+    .modal.active { transform: translateY(0); }
+    .search-bar { background: #D1D1D6; padding: 10px 16px; display: flex; align-items: center; }
+    .search-input { flex: 1; background: #fff; border-radius: 10px; padding: 10px 12px; border:none; font-size: 17px; outline:none; }
+</style>
+</head>
+<body>
+
+<div id="overlay">
+    <h2 style="margin-bottom:20px;">パスワードを入力</h2>
+    <input type="password" id="passInput" style="width:90%; padding:15px; border-radius:10px; border:1px solid #ccc; margin-bottom:20px; font-size:18px; text-align:center;" placeholder="****">
+    <button class="btn-main" onclick="tryLogin()" style="margin:0; width:90%;">ログイン</button>
+    <div id="errorLog" style="color:red; margin-top:20px; font-size:13px; font-weight:bold;"></div>
+</div>
+
+<div id="loadingOverlay"><div class="spinner"></div><div class="loading-text">データを読み込み中...</div></div>
+
+<div class="tab-bar">
+    <div class="tab-item active" onclick="switchView('calc', this)"><span class="tab-icon">🛒</span>レジ</div>
+    <div class="tab-item" onclick="switchView('hist', this)"><span class="tab-icon">🕒</span>履歴</div>
+    <div class="tab-item" onclick="switchView('manage', this)"><span class="tab-icon">⚙️</span>管理</div>
+</div>
+
+<div class="view active" id="view-calc">
+    <div class="header"><div style="width:60px;"></div><div class="header-title">授業料計算アプリ</div><div style="width:60px;"></div></div>
+    <div class="main-content">
+        <div class="section-title">顧客情報</div>
+        <div class="card"><div class="row"><div class="input-wrapper"><label class="input-label">顧客種別</label><select id="customerType" class="select-full"></select></div></div></div>
+        <div class="section-title">教室と講師</div>
+        <div class="card">
+            <div class="row"><div class="input-wrapper"><label class="input-label">教室を選択</label><select id="calcClassroom" class="select-full" onchange="updateTeacherSelect()"></select></div></div>
+            <div class="row"><div class="input-wrapper"><label class="input-label">講師を選択</label><select id="calcTeacher" class="select-full"></select></div></div>
+        </div>
+        <div class="section-title">授業セット</div>
+        <div id="courseBlocksArea"></div>
+        <button class="btn-outline" onclick="addCourseBlock()">＋ 別の授業セットを追加する</button>
+        <div class="section-title">教材・アイテム</div>
+        <div class="card" id="itemSelectionArea"><div class="row"><button class="btn-add" onclick="addItemRow()">＋ 教材を追加する</button></div></div>
+        <button class="btn-main" onclick="calculateTotal()">お支払い額を計算</button>
+
+        <div class="receipt" id="resultArea" style="display: none;">
+            <div class="r-title">お見積り明細</div>
+            <div id="receiptHeaderInfo" style="font-size:14px; color:#666; margin-bottom:12px;"></div>
+            <div id="resultBody"></div>
+            <div id="receiptSummaryArea"></div>
+            <div id="paymentOptions" style="margin-top:20px; font-size:14px; color:#555; background:#F2F2F7; padding:16px; border-radius:12px;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="view" id="view-hist"><div class="header"><div style="width:60px;"></div><div class="header-title">計算履歴</div><div style="width:60px;"></div></div><div class="main-content" id="historyArea"></div></div>
+
+<div class="view" id="view-manage">
+    <div class="header"><button class="btn-text" onclick="loadAllData()" style="font-size:15px;">再読込</button><div class="header-title">リスト管理</div><div style="width:60px;"></div></div>
+    <div class="main-content">
+        <div class="manage-grid">
+            <div class="m-tab active" onclick="switchManageTab('course', this)">授業設定</div>
+            <div class="m-tab" onclick="switchManageTab('item', this)">教材設定</div>
+            <div class="m-tab" onclick="switchManageTab('option', this)">授業オプション</div>
+            <div class="m-tab" onclick="switchManageTab('disc', this)">自動割引ルール</div>
+            <div class="m-tab" onclick="switchManageTab('class', this)">教室設定</div>
+            <div class="m-tab" onclick="switchManageTab('teacher', this)">講師設定</div>
+        </div>
+        <div id="m-area-course" class="manage-area active"><div class="card" id="manageCourseList"></div><button class="btn-main" onclick="openEditModal('course', -1)">＋ 授業追加</button></div>
+        <div id="m-area-item" class="manage-area"><div class="card" id="manageItemList"></div><button class="btn-main" onclick="openEditModal('item', -1)">＋ 教材追加</button></div>
+        <div id="m-area-option" class="manage-area"><div class="card" id="manageOptionList"></div><button class="btn-main" onclick="openEditModal('option', -1)">＋ オプション追加</button></div>
+        <div id="m-area-disc" class="manage-area"><div class="card" id="manageDiscList"></div><button class="btn-main" onclick="openEditModal('disc', -1)">＋ 割引設定を追加</button></div>
+        <div id="m-area-class" class="manage-area"><div class="card" id="manageClassList"></div><button class="btn-main" onclick="openEditModal('class', -1)">＋ 教室追加</button></div>
+        <div id="m-area-teacher" class="manage-area"><div class="card" id="manageTeacherList"></div><button class="btn-main" onclick="openEditModal('teacher', -1)">＋ 講師追加</button></div>
+    </div>
+</div>
+
+<div id="searchModal" class="modal"><div class="header"><button class="btn-text" onclick="closeModal('searchModal')">戻る</button><div class="header-title">検索</div><div style="width:60px;"></div></div><div class="search-bar"><input type="text" id="searchInput" class="search-input" placeholder="検索..." oninput="filterSearch()"></div><div id="searchList" style="overflow-y:auto; flex:1;"></div></div>
+
+<div id="editModal" class="modal"><div class="header"><button class="btn-text" onclick="closeModal('editModal')" style="color:var(--danger);">キャンセル</button><div class="header-title" id="editTitle">編集</div><button class="btn-text" onclick="saveMaster()">保存する</button></div>
+    <div class="main-content" style="padding:16px;">
+        <input type="hidden" id="editType"><input type="hidden" id="editIndex">
+        <div id="editArea_course" style="display:none;"><div class="input-wrapper"><label class="input-label">①授業コード</label><input type="text" id="e_c_code" class="input-box"></div><div class="input-wrapper"><label class="input-label">②授業名</label><input type="text" id="e_c_name" class="input-box"></div><div class="input-wrapper"><label class="input-label">③金額</label><input type="number" id="e_c_price" class="input-box"></div></div>
+        <div id="editArea_item" style="display:none;"><div class="input-wrapper"><label class="input-label">①教材名</label><input type="text" id="e_i_name" class="input-box"></div><div class="input-wrapper"><label class="input-label">②商品コード</label><input type="text" id="e_i_code" class="input-box"></div><div class="input-wrapper"><label class="input-label">③金額</label><input type="number" id="e_i_price" class="input-box"></div></div>
+        <div id="editArea_option" style="display:none;"><div class="input-wrapper"><label class="input-label">①オプション名</label><input type="text" id="e_o_name" class="input-box"></div><div class="input-wrapper"><label class="input-label">②金額</label><input type="number" id="e_o_price" class="input-box"></div></div>
+        <div id="editArea_disc" style="display:none;"><div class="input-wrapper"><label class="input-label">①対象名</label><select id="e_d_target" class="select-full"></select></div><div class="input-wrapper"><label class="input-label">②顧客種別</label><select id="e_d_cust" class="select-full"></select></div><div class="input-wrapper"><label class="input-label">③種類</label><select id="e_d_type" class="select-full"><option value="percent">％引き</option><option value="amount">円引き</option></select></div><div class="input-wrapper"><label class="input-label">④数字</label><input type="number" id="e_d_val" class="input-box"></div></div>
+        <div id="editArea_class" style="display:none;"><div class="input-wrapper"><label class="input-label">教室名</label><input type="text" id="e_cl_name" class="input-box"></div><div class="input-wrapper"><label class="input-label">教室コード</label><input type="text" id="e_cl_code" class="input-box"></div></div>
+        <div id="editArea_teacher" style="display:none;"><div class="input-wrapper"><label class="input-label">所属教室</label><select id="e_t_class" class="select-full"></select></div><div class="input-wrapper"><label class="input-label">講師名</label><input type="text" id="e_t_name" class="input-box"></div><div class="input-wrapper"><label class="input-label">講師コード</label><input type="text" id="e_t_code" class="input-box"></div></div>
+        <button id="delBtn" class="btn-outline" style="color:var(--danger); border-color:var(--danger); margin-top:24px;" onclick="deleteMaster()">削除する</button>
+    </div>
+</div>
+
+<script>
+// 【重要】GitHub公開時はダミーパスワードに設定。実際の運用時はご自身のパスワードに差し替えてください。
+const MY_PASS = 'YOUR_APP_PASSWORD'; 
+let courses=[], items=[], options=[], classes=[], teachers=[], discounts=[], histories=[];
+let courseBlockCount = 0; 
+const C_TYPES = ["講師", "助講師会長", "助講師", "しゅう美会", "上級生", "一般", "スタッフ"];
+
+// 助講師会長の値引き無し判定
+function isNoDiscountForKaicho(name) {
+    return ["帯専", "花嫁着付け", "きつけ舞", "着付師講座"].some(t => name.includes(t));
+}
+
+// 146個の教材等の初期データ自動生成（講師の初期データは完全に空に変更）
+const generateDefaultData = () => {
+    const C=(c,n,i,p,d,m,o=[])=>{ let opts = o.map(opt => Array.isArray(opt) ? {name: opt[0], price: opt[1]} : opt); return {code:c,name:n,itemCode:i,price:p,dRule:d,memo:m,options:opts}; };
+    const I=(u,n,c,p,d,m)=>({usedCourse:u,name:n,code:c,price:p,dRule:d,memo:m});
+    const cls=[{name:"名古屋",code:"10"},{name:"静岡",code:"15"},{name:"浜松",code:"17"},{name:"豊橋",code:"18"},{name:"渋谷",code:"20"},{name:"池袋",code:"21"},{name:"錦糸町",code:"22"},{name:"蒲田/武蔵小金井",code:"23"},{name:"町田",code:"24"},{name:"吉祥寺/新宿",code:"25"},{name:"立川",code:"26"},{name:"八王子",code:"27"},{name:"本厚木",code:"28"},{name:"横浜",code:"30"},{name:"上大岡",code:"31"},{name:"横須賀",code:"33"},{name:"藤沢",code:"32"},{name:"平塚",code:"37"},{name:"船橋",code:"34"},{name:"千葉",code:"35"},{name:"大宮",code:"40"},{name:"川越",code:"44"},{name:"所沢",code:"46"},{name:"柏",code:"63"},{name:"溝の口",code:"67"},{name:"本部",code:"90"}];
+    
+    // 講師の初期データはGitHub公開および個人情報非保持の観点から完全に空に設定
+    const tch=[];
+    
+    const crs=[
+        C("C01","専攻科","",42000,"none",""), C("C02","師範科","",48000,"none","",[["3級認定料",13000]]), C("C03","経営師範科","",52000,"none","",[["2級認定料",24000]]), C("C04","研究科","",52000,"none","",[["1級認定料",35000]]), C("C04","研究専科","",48000,"none","",[["准講師認定証",53000],["免許状",120000],["教養科",47000]]),
+        C("K01","教養科 (9月入会)","",47000,"kyouyou",""), C("K02","教養科 (10月入会)","",42300,"none",""), C("K03","教養科 (11月入会)","",37600,"none",""), C("K04","教養科 (12月入会)","",32900,"none",""), C("K05","教養科 (1・2月入会)","",28200,"none",""), C("K06","教養科 (3月入会)","",23500,"none",""), C("K07","教養科 (4月入会)","",18800,"none",""), C("K08","教養科 (5月入会)","",14100,"none",""), C("K09","教養科 (6月入会)","",9400,"none",""), C("K10","教養科 (7月入会)","",4700,"none",""),
+        C("O10","学/副学/主任ｵﾌﾟ (10回)","",46000,"kyouyou",""), C("O09","学/副学/主任ｵﾌﾟ (9回)","",41400,"kaicho10",""), C("O08","学/副学/主任ｵﾌﾟ (8回)","",36800,"kaicho10",""), C("O07","学/副学/主任ｵﾌﾟ (7回)","",32200,"kaicho10",""), C("O06","学/副学/主任ｵﾌﾟ (6回)","",27600,"kaicho10",""), C("O05","学/副学/主任ｵﾌﾟ (5回)","",23000,"kaicho10",""), C("O04","学/副学/主任ｵﾌﾟ (4回)","",18400,"kaicho10",""), C("O03","学/副学/主任ｵﾌﾟ (3回)","",13800,"kaicho10",""), C("O02","学/副学/主任ｵﾌﾟ (2回)","",9200,"kaicho10",""), C("O01","学/副学/主任ｵﾌﾟ (1回)","",4600,"kaicho10",""),
+        C("Y01","講師養成科 本科","",41000,"kaicho10",""), C("Y02","講師養成科 専科","",48000,"kaicho10",""), C("Y03","講師養成科 師範科","",48000,"kaicho10",""), C("Y04","講師養成科 経営師範科","",48000,"kaicho10",""), C("Y05","講師養成科 研究科","",48000,"kaicho10",""), C("Y06","講師養成科 研究専科科","",48000,"kaicho10",""), C("Y07","講師養成科 オプション","",46000,"kaicho10",""), C("Y08","講師養成科 特養(研究/専科)","",48000,"kaicho10",""),
+        C("P1","着付師養成科 P1","",64000,"kaicho10","",[["着付師登録料",2000],["着付師教本1",4600]]), C("P2","着付師養成科 P2","",64000,"kaicho10","",[["資格考査料",3500],["3級認定料",13000],["着付師登録料",2000],["着付師更新料",1000],["着付師教本1",4600]]), C("P3","着付師養成科 P3","",64000,"kaicho10","",[["資格考査料",6700],["2級認定料",24000],["着付師登録料",2000],["着付師更新料",1000],["着付師教本1",4600]]), C("P4","着付師養成科 P4","",64000,"kaicho10","",[["資格考査料",11000],["1級認定料",35000],["着付師登録料",2000],["着付師更新料",1000],["着付師教本2",4600]]), C("P5","着付師養成科 P5","",64000,"kaicho10","",[["着付師登録料",2000],["着付師更新料",1000]]), C("P6","着付師養成科 P6","",64000,"kaicho10","",[["着付師登録料",2000],["着付師更新料",1000]]), C("P7","着付師養成科 実践","",55000,"kaicho10","",[["着付師登録料",2000],["着付師更新料",1000],["着付師教本3",4600]]),
+        C("PR1","プロ着付師科 プロ1","",168000,"kaicho10","",[["考査料",5000]]), C("PR2-1","プロ着付師科 プロ2 (1枚)","",8600,"none","",[["再考査料",5000],["ﾗｲｾﾝｽ登録",33000]]), C("PR2-5","プロ着付師科 プロ2 (5枚)","",43000,"none","",[["再考査料",5000],["ﾗｲｾﾝｽ登録",33000]]), C("PR2-7","プロ着付師科 プロ2 (7枚)","",60200,"none","",[["再考査料",5000],["ﾗｲｾﾝｽ登録",33000]]), C("PR2-10","プロ着付師科 プロ2 (10枚)","",86000,"none","",[["再考査料",5000],["ﾗｲｾﾝｽ登録",33000]]), C("PR3-1","プロ着付師科 プロ3(1枚)","",8600,"none","",[["再考査料",5000],["ﾗｲセンs登録",33000]]), C("PR3-5","プロ着付師科 プロ3(5枚)","",43000,"none","",[["再考査料",5000],["ﾗｲｾﾝｽ登録",33000]]), C("PR3-7","プロ着付師科 プロ3(7枚)","",60200,"none","",[["再考査料",5000],["ﾗｲｾﾝｽ登録",33000]]), C("PR3-10","プロ着付師科 プロ3(10枚)","",86000,"none","",[["再考査料",5000],["ﾗｲｾﾝｽ登録",33000]]),
+        C("Z01","悠遊講座","",32000,"kaicho10",""), C("Z02","悠遊講座 きつけ舞","",36000,"kaicho10",""), C("Z03","きもの知識講座","",44000,"kaicho10",""), C("Z04","きつけ舞講座 初伝","",42000,"kaicho10",""), C("Z05","きつけ舞講座 中伝","",45000,"kaicho10",""), C("Z06","きつけ舞講座 奥伝","",50000,"kaicho10",""), C("Z07","きつけ舞講座 研究科","",48000,"kaicho10",""), C("Z08","きつけ舞講座 講師養成科","",51000,"kaicho10",""), C("Z09","きつけ舞講座 研究会","",31000,"kaicho10",""),
+        C("Z10","和裁科 P1","",45000,"kaicho10",""), C("Z11","和裁科 P2～4","",48000,"kaicho10",""), C("Z12","和裁科 P5～6","",51000,"kaicho10",""), C("Z13","和裁科 研究科","",53000,"kaicho10",""), C("Z14","地唄舞 5～6人","",47000,"kaicho10",""), C("Z15","地唄舞 7人以上","",44000,"kaicho10",""), C("Z16","ヘアメイク","",49000,"kaicho10",""), C("Z17","振袖創作帯結","",46000,"kaicho10",""), C("Z18","技術普及部講座","",46000,"kaicho10",""), C("Z19","パッチワーク","",40000,"kaicho10","")
+    ];
+    const itm=[
+        I("","テキスト 本科","60117",1700,"koushi_jokoushi_500",""), I("","テキスト 専攻科","60127",1700,"koushi_jokoushi_500",""), I("","テキスト 師範科","60137",1700,"koushi_jokoushi_500",""), I("","テキスト 経営師範科","60197",1700,"koushi_jokoushi_500",""), I("","テキスト 総集編","60207",2800,"koushi_jokoushi_500",""),
+        I("","帯専科テキスト I","60001",2600,"koushi_500",""), I("","帯専科テキスト Ⅱ","60002",2600,"koushi_500",""), I("","帯専科テキスト Ⅲ","60003",2600,"koushi_500",""), I("","帯専科テキスト IV","60004",2600,"koushi_500",""), I("","特選 花嫁着付け","60051",3000,"koushi_500",""), I("","楽しいきつけ舞I","60052",3000,"koushi_500",""), I("","楽しいきつけ舞Ⅱ","60053",3000,"koushi_500",""), I("","楽しいきつけ舞Ⅲ","60054",3000,"koushi_500",""), I("","着付師講座 教本","60217",4600,"koushi_500",""), I("","着付師講座 教本Ⅱ","60227",4600,"koushi_500",""), I("","着付師講座 教本Ⅲ","60237",4600,"koushi_500",""),
+        I("","仕立衿","60214",2300,"none",""), I("","仕立衿(2)","60224",2300,"none",""), I("","衿芯","60252",300,"none",""), I("","クリップ","60312",1500,"none",""), I("","学院クリップ大","60322",1000,"none",""), I("","学院クリップ中","60332",3700,"none",""), I("","教材枕","60412",3000,"none",""), I("","お太鼓枕","60422",1900,"none",""), I("","変化枕","60432",1900,"none",""), I("","後板","60512",900,"none",""), I("","前板ゴム付き ピンク","60522",1400,"none",""), I("","前板ゴム付き 白","60534",1600,"none",""), I("","前板ゴム無し","60562",1000,"none",""), I("","きものサッシュ ピンク","60612",2900,"none",""), I("","きものサッシュ 白","60624",2900,"none",""), I("","伊達〆 ピンク","60712",1900,"none",""), I("","伊達〆 白","60722",1900,"none",""),
+        I("","すずろベルト S","60810",2300,"none",""), I("","すずろベルト M","60820",2300,"none",""), I("","すずろベルト L","60830",2300,"none",""), I("","すずろベルト LL","60840",2300,"none",""), I("","すずろ腰ひも 白","61050",1500,"none",""), I("","ウエストベルト ピンク","60812",1000,"none",""), I("","ウエストベルト ピンクL","60822",1200,"none",""), I("","ウエストベルト白","60824",1500,"none",""), I("","コーリンベルト","60912",1100,"none",""), I("","コーリンベルト L","60922",1100,"none",""), I("","仮ひも","61014",200,"none",""), I("","三重ひも","61024",800,"none",""), I("","腰ひも","61032",1200,"none",""), I("","腰ひも 長尺","61042",600,"none",""),
+        I("","ファンデーション S","61112",5100,"none",""), I("","ファンデーション M","61122",5100,"none",""), I("","ファンデーション L","61132",5100,"none",""), I("","ファンデーション LL","61142",5200,"none",""), I("","和装ブラジャー M","61212",4000,"none",""), I("","和装ブラジャー L","61222",4000,"none",""), I("","和装ブラジャー LL","61232",4000,"none",""),
+        I("","長襦袢 ピンク M (NEW)","61351",8200,"none",""), I("","長襦袢 ピンク M","61311",8200,"none",""), I("","長襦袢 ピンク L","61321",8200,"none",""), I("","長襦袢 白 M","61331",8200,"none",""), I("","長襦袢 白 L","61341",8200,"none",""), I("","振袖用長襦袢 S","61316",8800,"none",""), I("","振袖用長襦袢 M","61326",8800,"none",""), I("","振袖用長襦袢 L","61336",8800,"none",""), I("","振袖用長襦袢 LL","61346",8800,"none",""), I("","肌襦袢 M","61412",2300,"none",""), I("","肌襦袢 L","61422",2300,"none",""), I("","肌襦袢 LL","61432",2500,"none",""), I("","クレープ肌襦袢 M","61612",2600,"none",""), I("","クレープ肌襦袢 L","61622",2600,"none",""), I("","裾除 M","61712",4200,"none",""), I("","裾除 L","61722",4200,"none",""), I("","裾除 LL","61732",4500,"none",""),
+        ...['22.0','22.5','23.0','23.5','24.0','24.5','25.0','25.5'].map(s=>I("",`なみ福助足袋 ${s}`,`618${s.replace('.','')}`.slice(0,5),3500,"none","")),
+        ...['22.0','22.5','23.0','23.5','24.0','24.5','25.0','25.5'].map(s=>I("",`ゆたか福助足袋 ${s}`,`619${s.replace('.','')}`.slice(0,5),3500,"none","")),
+        I("","足袋カバー S","62013",700,"none",""), I("","足袋カバー M","62023",700,"none",""), I("","足袋カバー L","62033",700,"none",""), I("","研修DVD I","62110",7200,"none",""), I("","研修DVD Ⅱ","62120",4400,"none",""), I("","研修DVD Ⅲ","62130",4200,"none",""), I("","研修DVD IV","62140",7700,"none",""), I("","DVD4巻セット","DVDSET",21000,"none",""),
+        I("","プレタ着物","62411",9000,"none",""), I("","袋帯","62422",28000,"none",""), I("","八寸名古屋","62431",7500,"none",""), I("","半巾帯","62441",4400,"none",""), I("","きつけ舞 名古屋帯","62460",53000,"none",""), I("","きつけ舞 博多単衣帯","62461",39000,"none",""), I("","和装ボディ 大","62515",50000,"none",""), I("","専攻科用ｼｬｰﾌﾟﾍﾟﾝｼﾙ","62710",0,"none",""), I("","本科用ｸﾘｱｰﾌｧｲﾙ","62711",0,"none",""), I("","着付師ユニフォーム S","62614",11000,"none",""), I("","着付師ユニフォーム M","62615",11000,"none",""), I("","着付師ユニフォーム L","62616",11000,"none",""), I("","旧)着付師ユニフォーム LL","62613",10000,"none",""),
+        I("","さらし肌襦袢 M","61512",2300,"none",""), I("","さらし肌襦袢 L","61522",2300,"none",""), I("","絽裾除 M","61742",3500,"none",""), I("","絽裾除 L","61752",3500,"none",""), I("","絽裾除(居敷当付) M","61762",5500,"none",""), I("","絽裾除(居敷当付) L","61772",5500,"none",""), I("","針4-1(1包)","63050",500,"none",""), I("","針4-2(1包)","63060",500,"none",""), I("","針4-3(包)","63070",500,"none",""), I("","かけ針","63080",900,"none",""), I("","指皮(1枚)","63120",150,"none",""), I("","ぞべ糸(80)","63180",250,"none",""), I("","メジャー(尺・センチ)","63210",1100,"none",""), I("","くけ台(木製)","63220",4500,"none",""), I("","へら台","63230",9500,"none",""),
+        I("","ブラシ","60951",1100,"none",""), I("","すき毛(褐色)","60953",1300,"none",""), I("","ネジピン","60954",1300,"none",""), I("","保護ネット(5枚)","60955",200,"none",""), I("","コーム(ピンク)","60956",300,"none",""), I("","コーム(グリーン)","60957",300,"none",""), I("","コーム(メタピンク)","60958",300,"none",""), I("","ポマードブラシ","60965",2300,"none",""), I("","リップブラシ","60968",2200,"none",""), I("","チークブラシ","60969",2800,"none",""), I("","アイブロウブラシ","60979",1000,"none",""), I("","楽屋足袋 22.0","61812",2200,"none",""), I("","楽屋足袋 25.0","61872",2200,"none",""), I("","楽屋足袋 25.5","61882",2200,"none",""), I("","浴衣下 M","80016",1500,"none",""), I("","旧)着付師ユニフォーム L","62611",6500,"none","")
+    ];
+    const opt=[
+        {name: "3級認定料", price: 13000}, {name: "2級認定料", price: 24000}, {name: "1級認定料", price: 35000}, 
+        {name: "准講師認定証", price: 53000}, {name: "免許状", price: 120000}, {name: "着付師登録料", price: 2000}, 
+        {name: "着付師更新料", price: 1000}, {name: "資格考査料", price: 3500}, {name: "考査料", price: 5000}, 
+        {name: "再考査料", price: 5000}, {name: "ライセンス登録", price: 33000}, {name: "着付師教本1", price: 4600},
+        {name: "着付師教本2", price: 4600}, {name: "着付師教本3", price: 4600}, {name: "教養科", price: 47000}
+    ];
+    let dList=[];
+    crs.forEach(c=>{
+        if(c.dRule==='kyouyou'){ dList.push({target:c.name,cust:'助講師',type:'percent',val:10}); dList.push({target:c.name,cust:'助講師会長',type:'percent',val:20}); }
+        else if(c.dRule==='kaicho10'){ dList.push({target:c.name,cust:'助講師会長',type:'percent',val:10}); }
+    });
+    itm.forEach(i=>{
+        if(i.dRule==='koushi_jokoushi_500'){ dList.push({target:i.name,cust:'講師',type:'amount',val:500}); dList.push({target:i.name,cust:'助講師',type:'amount',val:500}); dList.push({target:i.name,cust:'助講師会長',type:'amount',val:500}); }
+        else if(i.dRule==='koushi_500'){ dList.push({target:i.name,cust:'講師',type:'amount',val:500}); dList.push({target:i.name,cust:'助講師会長',type:'amount',val:500}); }
+    });
+    return {courses:crs, items:itm, options:opt, classes:cls, teachers:tch, discounts:dList, histories:[]};
+};
+
+function tryLogin() {
+    if(document.getElementById('passInput').value === MY_PASS) {
+        document.getElementById('overlay').style.display = 'none';
+        loadAllData();
+    } else {
+        document.getElementById('errorLog').innerText = "パスワードが違います。";
+    }
+}
+
+function loadAllData() {
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    google.script.run.withSuccessHandler((data) => {
+        if (!data || (!data.courses.length && !data.items.length)) {
+            const def = generateDefaultData();
+            courses=def.courses; items=def.items; options=def.options; classes=def.classes; teachers=def.teachers; discounts=def.discounts; histories=[];
+            google.script.run.saveAllMasters(def);
+        } else {
+            courses=data.courses||[]; items=data.items||[]; options=data.options||[]; classes=data.classes||[]; teachers=data.teachers||[]; discounts=data.discounts||[]; histories=data.histories||[];
+        }
+        initUI();
+        document.getElementById('loadingOverlay').style.display = 'none';
+    }).withFailureHandler((err) => {
+        document.getElementById('loadingOverlay').style.display = 'none';
+        alert("データの読み込みに失敗しました。\n" + err.message);
+    }).loadData();
+}
+
+function initUI() {
+    const selC = document.getElementById('calcClassroom');
+    selC.innerHTML = '<option value="">-- 教室を選択 --</option>';
+    classes.forEach(c => selC.innerHTML += `<option value="${c.name}">${c.name}</option>`);
+    
+    const selCust = document.getElementById('customerType');
+    selCust.innerHTML = '';
+    C_TYPES.forEach(t => selCust.innerHTML += `<option value="${t}">${t}${t==='一般'?' (割引なし)':''}</option>`);
+
+    renderManageLists();
+    if(document.getElementById('courseBlocksArea').innerHTML === '') addCourseBlock();
+}
+
+function updateTeacherSelect() {
+    const cls = document.getElementById('calcClassroom').value, sel = document.getElementById('calcTeacher');
+    sel.innerHTML = '<option value="">-- 講師を選択 --</option>';
+    teachers.filter(t => t.classroom === cls).forEach(t => sel.innerHTML += `<option value="${t.code}">${t.name}</option>`);
+}
+
+function addCourseBlock() {
+    courseBlockCount++;
+    const bId = 'cb-' + Date.now();
+    const html = `
+    <div class="card course-block" id="${bId}" style="border-top:none; margin-bottom:16px;">
+        <div style="background:#F2F2F7; padding:8px 16px; font-size:12px; font-weight:600; color:#6D6D72; display:flex; justify-content:space-between; align-items:center;">
+            <span>授業セット ${courseBlockCount}</span><button class="btn-text" style="color:var(--danger); font-size:11px; padding:0;" onclick="document.getElementById('${bId}').remove()">削除</button>
+        </div>
+        <div class="row">
+            <button class="btn-add" style="flex:1;" onclick="openSearch('course', '${bId}')"><span class="c-name">授業を選択...</span></button>
+            <button class="btn-text c-del-btn" style="color:var(--danger); font-size:12px; display:none;" onclick="clearCourse('${bId}')">外す</button>
+            <input type="hidden" class="c-idx" value="">
+        </div>
+        <div class="c-options-area"></div>
+        <div class="row"><label style="font-size:15px; font-weight:500;">土日開催(+¥1,000)</label><div class="switch-container"><label class="switch"><input type="checkbox" class="c-weekend"><span class="slider"></span></label></div></div>
+        <div class="row"><label style="font-size:15px; font-weight:500;">夜間開催(+¥1,000)</label><div class="switch-container"><label class="switch"><input type="checkbox" class="c-night"><span class="slider"></span></label></div></div>
+        <div class="c-standalone-area"></div>
+        <div class="row" style="background: #F9F9F9;"><button class="btn-add" style="font-size:14px; color:var(--primary);" onclick="openSearch('option', '${bId}')">＋ 授業ｵﾌﾟｼｮﾝを単体追加</button></div>
+    </div>`;
+    document.getElementById('courseBlocksArea').insertAdjacentHTML('beforeend', html);
+}
+
+function clearCourse(blockId) {
+    const block = document.getElementById(blockId);
+    block.querySelector('.c-idx').value = ''; block.querySelector('.c-name').innerHTML = `授業を選択...`;
+    block.querySelector('.c-del-btn').style.display = 'none'; block.querySelector('.c-options-area').innerHTML = '';
+}
+
+let searchType, targetId;
+function openSearch(type, id) { searchType = type; targetId = id; document.getElementById('searchModal').classList.add('active'); renderSearchList(''); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+function renderSearchList(q) {
+    const list = document.getElementById('searchList'); list.innerHTML='';
+    let data = (searchType === 'course') ? courses : (searchType === 'option') ? options : items;
+    data.forEach((d, idx) => {
+        if(!q || d.name.includes(q)) {
+            let div = document.createElement('div'); div.className='list-item';
+            div.innerHTML = `<div><div style="font-weight:600; font-size:16px;">${d.name}</div></div><div style="color:var(--primary); font-weight:700; font-size:17px;">¥${Number(d.price||0).toLocaleString()}</div>`;
+            div.onclick = () => {
+                let t = document.getElementById(targetId);
+                if (searchType === 'course') {
+                    t.querySelector('.c-name').innerHTML = `<span style="font-size:16px;">${d.name}</span> <span style="float:right; font-size:16px;">¥${Number(d.price||0).toLocaleString()}</span>`;
+                    t.querySelector('.c-idx').value = idx;
+                    t.querySelector('.c-del-btn').style.display = 'block';
+                    let optArea = t.querySelector('.c-options-area'); optArea.innerHTML = '';
+                    if(d.options) d.options.forEach(opt => {
+                        let n = opt.name||opt[0], p = opt.price||opt[1];
+                        optArea.innerHTML += `<div class="row" style="background:#F9F9F9; border-top:0.5px solid #e5e5ea;"><label style="font-size:14px; color:#333;">+ 付属: ${n}</label><div class="switch-container"><label class="switch"><input type="checkbox" class="course-option-chk" data-name="${n}" data-price="${p}"><span class="slider"></span></label></div></div>`;
+                    });
+                } else if (searchType === 'option') {
+                    t.querySelector('.c-standalone-area').innerHTML += `<div class="row" style="background:#F9F9F9; border-top:0.5px solid #e5e5ea;"><div style="font-size:14px; font-weight:500;">+ ｵﾌﾟｼｮﾝ: ${d.name}</div><div style="display:flex; align-items:center;"><span style="font-weight:700; margin-right:12px;">¥${Number(d.price||0).toLocaleString()}</span><button class="btn-text" style="color:var(--danger); font-size:13px; padding:0;" onclick="this.parentElement.parentElement.remove()">削除</button><input type="hidden" class="standalone-opt-val" data-name="${d.name}" data-price="${d.price}"></div></div>`;
+                } else {
+                    t.querySelector('.i-name').innerHTML = `<span style="font-size:16px;">${d.name}</span> <span style="float:right; font-size:16px;">¥${Number(d.price||0).toLocaleString()}</span>`;
+                    t.querySelector('.i-idx').value = idx;
+                }
+                closeModal('searchModal');
+            };
+            list.appendChild(div);
+        }
+    });
+}
+
+function addItemRow() {
+    let id = 'i-' + Date.now();
+    let div = document.createElement('div'); div.className='row'; div.id=id;
+    div.innerHTML = `<div style="width:100%;"><button class="btn-add" onclick="openSearch('item','${id}')"><span class="i-name">教材を選択...</span></button><input type="hidden" class="i-idx" value=""><div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;"><button class="btn-text" style="color:var(--danger); font-size:14px; padding:0;" onclick="document.getElementById('${id}').remove()">削除</button><div style="display:flex; align-items:center; background:#E5E5EA; border-radius:10px; padding:4px;"><button style="background:none;border:none;font-size:22px;width:36px;color:#000;" onclick="changeQty(this,-1)">−</button><input class="qty" value="1" readonly style="width:30px;text-align:center;border:none;background:none;font-weight:700;font-size:16px;color:#000;"><button style="background:none;border:none;font-size:22px;width:36px;color:#000;" onclick="changeQty(this,1)">＋</button></div></div></div>`;
+    document.getElementById('itemSelectionArea').insertBefore(div, document.getElementById('itemSelectionArea').lastElementChild);
+}
+function changeQty(b, a) { let i=b.parentElement.querySelector('input'); let v=parseInt(i.value); if(v+a>=1) i.value=v+a; }
+
+function calculateTotal() {
+    const cust = document.getElementById('customerType').value, cls = document.getElementById('calcClassroom').value, tCode = document.getElementById('calcTeacher').value;
+    let gTotal = 0, totalDisc = 0;
+    const body = document.getElementById('resultBody'); body.innerHTML='';
+    document.getElementById('receiptHeaderInfo').innerHTML = `顧客種別: <b>${cust}</b> / 教室: <b>${cls||'-'}</b> / 講師: <b>${tCode||'-'}</b>`;
+
+    document.querySelectorAll('.course-block').forEach(block => {
+        let ci = block.querySelector('.c-idx').value, bSum = 0;
+        if(ci !== "") {
+            const c = courses[ci];
+            let basePlus = Number(c.price||0) + (block.querySelector('.c-weekend').checked ? 1000 : 0) + (block.querySelector('.c-night').checked ? 1000 : 0);
+            
+            let dRule = (cust==="一般") ? null : discounts.find(d => d.target === c.name && d.cust === cust);
+            if (cust === "助講師会長" && isNoDiscountForKaicho(c.name)) dRule = null;
+            
+            let disc = dRule ? (dRule.type==='percent' ? Math.floor(basePlus*(Number(dRule.val||0)/100)) : Number(dRule.val||0)) : 0;
+            let final = basePlus - disc; totalDisc += disc; bSum += final;
+            
+            body.innerHTML += `<div class="r-item-main"><span>[授業] ${c.name}</span><span>¥${final.toLocaleString()}</span></div>`;
+            if(disc > 0) body.innerHTML += `<div class="r-item-disc">└ 割引 (${cust})<span>-¥${disc.toLocaleString()}</span></div>`;
+            block.querySelectorAll('.course-option-chk:checked').forEach(chk => { let p=parseInt(chk.dataset.price); bSum+=p; body.innerHTML+=`<div class="r-item-sub"><span>+ 付属: ${chk.dataset.name}</span><span>¥${p.toLocaleString()}</span></div>`; });
+        }
+        block.querySelectorAll('.standalone-opt-val').forEach(opt => { let p=parseInt(opt.dataset.price); bSum+=p; body.innerHTML+=`<div class="r-item-sub"><span>+ 単体: ${opt.dataset.name}</span><span>¥${p.toLocaleString()}</span></div>`; });
+        if(bSum > 0) { body.innerHTML += `<div class="r-item-final">授業セット 計<span>¥${bSum.toLocaleString()}</span></div>`; gTotal += bSum; }
+    });
+
+    document.querySelectorAll('.i-idx').forEach(el => {
+        if(!el.value) return;
+        const i = items[el.value], q = parseInt(el.parentElement.querySelector('.qty').value);
+        let sub = Number(i.price||0) * q;
+        
+        let dRule = (cust==="一般") ? null : discounts.find(d => d.target === i.name && d.cust === cust);
+        if (cust === "助講師会長" && isNoDiscountForKaicho(i.name)) dRule = null;
+        
+        let disc = dRule ? (dRule.type==='percent' ? Math.floor(sub*(Number(dRule.val||0)/100)) : Number(dRule.val||0) * q) : 0;
+        let final = sub - disc; totalDisc += disc; gTotal += final;
+        
+        body.innerHTML += `<div class="r-item-main"><span>[教材] ${i.name} (x${q})</span><span>¥${final.toLocaleString()}</span></div>`;
+        if(disc > 0) body.innerHTML += `<div class="r-item-disc">└ 教材割引 (${cust})<span>-¥${disc.toLocaleString()}</span></div>`;
+    });
+
+    let sHtml = (totalDisc > 0 ? `<div class="r-item-main" style="color:var(--danger); margin-bottom:8px;"><span>🌟 割引合計</span><span>-¥${totalDisc.toLocaleString()}</span></div>` : '');
+    sHtml += `<div class="r-total">お支払い合計 ¥${gTotal.toLocaleString()}</div>`;
+    document.getElementById('receiptSummaryArea').innerHTML = sHtml;
+    
+    let payHtml = '';
+    [3,6,10].forEach(n => { let m=Math.floor(gTotal/n); if(m>=3000) payHtml+=`<div style="display:flex; justify-content:space-between; margin-top:4px;"><span>${n}回払い</span><span>月々 約 ¥${m.toLocaleString()}</span></div>`; });
+    document.getElementById('paymentOptions').innerHTML = payHtml;
+    document.getElementById('resultArea').style.display='block';
+    
+    google.script.run.appendHistory({date: new Date().toLocaleString('ja-JP'), customer: cust, class: cls, teacher: tCode, total: gTotal, details: [] });
+}
+
+function renderManageLists() {
+    const L = (id, data, type) => {
+        const el = document.getElementById(id); el.innerHTML = '';
+        data.forEach((d, idx) => el.innerHTML += `<div class="list-item" onclick="openEditModal('${type}',${idx})"><div><b>${d.name||d.target||''}</b></div><div style="color:var(--primary); font-weight:700;">¥${Number(d.price||d.val||0).toLocaleString()}</div></div>`);
+    };
+    L('manageCourseList', courses, 'course'); L('manageItemList', items, 'item'); L('manageOptionList', options, 'option');
+    
+    const LD = (id, data, type) => {
+        const el = document.getElementById(id); el.innerHTML = '';
+        data.forEach((d, idx) => el.innerHTML += `<div class="list-item" onclick="openEditModal('${type}',${idx})"><div>${d.target} (${d.cust})</div><div style="color:var(--danger); font-weight:700;">${d.val}${d.type==='percent'?'%引':'円引'}</div></div>`);
+    };
+    LD('manageDiscList', discounts, 'disc');
+    
+    let cEl=document.getElementById('manageClassList'); cEl.innerHTML=''; classes.forEach((c,idx)=>cEl.innerHTML+=`<div class="list-item" onclick="openEditModal('class',${idx})"><div>${c.name}</div><div style="color:var(--sub);">${c.code}</div></div>`);
+    let tEl=document.getElementById('manageTeacherList'); tEl.innerHTML=''; teachers.forEach((t,idx)=>tEl.innerHTML+=`<div class="list-item" onclick="openEditModal('teacher',${idx})"><div>${t.name} (所属: ${t.classroom})</div><div style="color:var(--sub);">${t.code}</div></div>`);
+}
+
+function openEditModal(t, i) {
+    document.getElementById('editType').value=t; document.getElementById('editIndex').value=i;
+    ['course','item','option','disc','class','teacher'].forEach(x => document.getElementById('editArea_'+x).style.display='none');
+    
+    if(t === 'disc') {
+        document.getElementById('editArea_disc').style.display='block';
+        const selT = document.getElementById('e_d_target'); selT.innerHTML = '';
+        courses.forEach(x => selT.innerHTML += `<option value="${x.name}">${x.name}</option>`);
+        items.forEach(x => selT.innerHTML += `<option value="${x.name}">${x.name}</option>`);
+        const selC = document.getElementById('e_d_cust'); selC.innerHTML = '';
+        C_TYPES.forEach(x => selC.innerHTML += `<option value="${x}">${x}</option>`);
+        if(i!==-1) {
+            let d = discounts[i];
+            selT.value = d.target; selC.value = d.cust; document.getElementById('e_d_type').value = d.type; document.getElementById('e_d_val').value = d.val;
+        } else { document.getElementById('e_d_val').value = ''; }
+    } else {
+        document.getElementById('editArea_'+t).style.display='block';
+        if(t==='teacher') { const selC = document.getElementById('e_t_class'); selC.innerHTML = ''; classes.forEach(c => selC.innerHTML += `<option value="${c.name}">${c.name}</option>`); }
+        if(i===-1) {
+            if(t==='course') { document.getElementById('e_c_code').value=''; document.getElementById('e_c_name').value=''; document.getElementById('e_c_price').value=''; }
+            if(t==='item') { document.getElementById('e_i_code').value=''; document.getElementById('e_i_name').value=''; document.getElementById('e_i_price').value=''; }
+            if(t==='option') { document.getElementById('e_o_name').value=''; document.getElementById('e_o_price').value=''; }
+            if(t==='class') { document.getElementById('e_cl_code').value=''; document.getElementById('e_cl_name').value=''; }
+            if(t==='teacher') { document.getElementById('e_t_code').value=''; document.getElementById('e_t_name').value=''; }
+        } else {
+            let d = (t==='course')?courses[i]:(t==='item')?items[i]:(t==='option')?options[i]:(t==='class')?classes[i]:teachers[i];
+            if(t==='course') { document.getElementById('e_c_code').value=d.code||''; document.getElementById('e_c_name').value=d.name; document.getElementById('e_c_price').value=d.price; }
+            if(t==='item') { document.getElementById('e_i_code').value=d.code||''; document.getElementById('e_i_name').value=d.name; document.getElementById('e_i_price').value=d.price; }
+            if(t==='option') { document.getElementById('e_o_name').value=d.name; document.getElementById('e_o_price').value=d.price; }
+            if(t==='class') { document.getElementById('e_cl_code').value=d.code; document.getElementById('e_cl_name').value=d.name; }
+            if(t==='teacher') { document.getElementById('e_t_class').value=d.classroom; document.getElementById('e_t_name').value=d.name; document.getElementById('e_t_code').value=d.code; }
+        }
+    }
+    document.getElementById('delBtn').style.display = (i===-1) ? 'none' : 'block';
+    document.getElementById('editModal').classList.add('active');
+}
+
+function saveMaster() {
+    const t=document.getElementById('editType').value, i=parseInt(document.getElementById('editIndex').value);
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    
+    let sName = (t==='course')?'courses':(t==='item')?'items':(t==='option')?'options':(t==='class')?'classes':(t==='teacher')?'teachers':'discounts';
+    
+    if(t === 'disc') {
+        let obj = {target:document.getElementById('e_d_target').value, cust:document.getElementById('e_d_cust').value, type:document.getElementById('e_d_type').value, val:parseInt(document.getElementById('e_d_val').value)};
+        if(i===-1) discounts.push(obj); else discounts[i]=obj;
+        google.script.run.withSuccessHandler(()=>{ document.getElementById('loadingOverlay').style.display='none'; renderManageLists(); closeModal('editModal'); }).saveMasterData(sName, discounts);
+    } else {
+        let obj={};
+        if(t==='course'){ obj={code:document.getElementById('e_c_code').value, name:document.getElementById('e_c_name').value, price:parseInt(document.getElementById('e_c_price').value)||0, options:(i!==-1)?courses[i].options:[]}; if(i===-1)courses.push(obj); else courses[i]=Object.assign(courses[i], obj); }
+        if(t==='item'){ obj={name:document.getElementById('e_i_name').value, code:document.getElementById('e_i_code').value, price:parseInt(document.getElementById('e_i_price').value)||0}; if(i===-1)items.push(obj); else items[i]=Object.assign(items[i], obj); }
+        if(t==='option'){ obj={name:document.getElementById('e_o_name').value, price:parseInt(document.getElementById('e_o_price').value)||0}; if(i===-1)options.push(obj); else options[i]=Object.assign(options[i], obj); }
+        if(t==='class'){ obj={code:document.getElementById('e_cl_code').value, name:document.getElementById('e_cl_name').value}; if(i===-1)classes.push(obj); else classes[i]=obj; }
+        if(t==='teacher'){ obj={classroom:document.getElementById('e_t_class').value, name:document.getElementById('e_t_name').value, code:document.getElementById('e_t_code').value}; if(i===-1)teachers.push(obj); else teachers[i]=obj; }
+        
+        let arr = (t==='course')?courses:(t==='item')?items:(t==='option')?options:(t==='class')?classes:teachers;
+        google.script.run.withSuccessHandler(()=>{ document.getElementById('loadingOverlay').style.display='none'; renderManageLists(); closeModal('editModal'); if(t==='class')initUI(); }).saveMasterData(sName, arr);
+    }
+}
+
+function deleteMaster() {
+    if(!confirm("本当に削除しますか？")) return;
+    const t=document.getElementById('editType').value, i=parseInt(document.getElementById('editIndex').value);
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    
+    let sName = (t==='course')?'courses':(t==='item')?'items':(t==='option')?'options':(t==='class')?'classes':(t==='teacher')?'teachers':'discounts';
+    let arr = (t==='course')?courses:(t==='item')?items:(t==='option')?options:(t==='class')?classes:(t==='teacher')?teachers:discounts;
+    arr.splice(i,1);
+    
+    google.script.run.withSuccessHandler(()=>{ document.getElementById('loadingOverlay').style.display='none'; renderManageLists(); closeModal('editModal'); if(t==='class')initUI(); }).saveMasterData(sName, arr);
+}
+
+function switchView(id, el) { 
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active')); document.getElementById('view-'+id).classList.add('active'); 
+    document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active')); el.classList.add('active'); window.scrollTo({top:0});
+}
+function switchManageTab(id, el) { 
+    document.querySelectorAll('.manage-area').forEach(v => v.classList.remove('active')); document.getElementById('m-area-'+id).classList.add('active'); 
+    document.querySelectorAll('.m-tab').forEach(t => t.classList.remove('active')); el.classList.add('active'); 
+}
+</script>
+</body>
+</html>
